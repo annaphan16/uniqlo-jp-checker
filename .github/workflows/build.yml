@@ -52,34 +52,6 @@ jobs:
           # Verify camoufox works
           python -c "from camoufox.sync_api import Camoufox; print('Camoufox imported successfully')"
 
-      - name: Get browserforge data path
-        id: browserforge_path
-        run: |
-          # Use importlib to find package location (works for namespace packages)
-          $path = python -c "import importlib.util; spec = importlib.util.find_spec('browserforge'); print(spec.submodule_search_locations[0] if spec.submodule_search_locations else spec.origin.rsplit('\\\\', 1)[0] if spec.origin else '')"
-
-          # Fallback: try pip show
-          if (-not $path -or $path -eq "") {
-            $pipInfo = pip show browserforge | Select-String "Location:"
-            if ($pipInfo) {
-              $sitePackages = ($pipInfo -replace "Location: ", "").Trim()
-              $path = "$sitePackages\browserforge"
-            }
-          }
-
-          echo "BROWSERFORGE_PATH=$path" >> $env:GITHUB_OUTPUT
-          echo "Browserforge path: $path"
-
-          # List data files
-          if ($path -and (Test-Path $path)) {
-            echo "Fingerprints data:"
-            Get-ChildItem -Path "$path\fingerprints\data" -ErrorAction SilentlyContinue
-            echo "Headers data:"
-            Get-ChildItem -Path "$path\headers\data" -ErrorAction SilentlyContinue
-          } else {
-            echo "WARNING: Browserforge path not found or empty"
-          }
-
       - name: Build EXE (onedir mode)
         run: |
           pyinstaller --name UniqloJPChecker `
@@ -124,98 +96,33 @@ jobs:
       - name: Verify browserforge data in build
         run: |
           echo "Checking browserforge data in dist..."
-          Get-ChildItem -Path "dist/UniqloJPChecker/_internal/browserforge" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
 
-          # Check if data files exist
-          $fingerprintData = "dist/UniqloJPChecker/_internal/browserforge/fingerprints/data"
-          $headersData = "dist/UniqloJPChecker/_internal/browserforge/headers/data"
+          $fingerprintZip = "dist/UniqloJPChecker/_internal/browserforge/fingerprints/data/fingerprint-network.zip"
+          $headersZip = "dist/UniqloJPChecker/_internal/browserforge/headers/data/input-network.zip"
 
-          if (Test-Path $fingerprintData) {
-            echo "Fingerprint data exists:"
-            Get-ChildItem $fingerprintData
-          } else {
-            echo "WARNING: Fingerprint data NOT found!"
-          }
+          $allFound = $true
 
-          if (Test-Path $headersData) {
-            echo "Headers data exists:"
-            Get-ChildItem $headersData
-          } else {
-            echo "WARNING: Headers data NOT found!"
-          }
-
-      - name: Copy browserforge data manually
-        run: |
-          $browserforge_path = python -c "import browserforge; import os; print(os.path.dirname(browserforge.__file__))"
-          $dest_internal = "dist/UniqloJPChecker/_internal/browserforge"
-
-          echo "Source browserforge path: $browserforge_path"
-          echo "Destination path: $dest_internal"
-
-          # List source data files
-          echo "Source fingerprints data:"
-          Get-ChildItem -Path "$browserforge_path\fingerprints\data" -ErrorAction SilentlyContinue
-          echo "Source headers data:"
-          Get-ChildItem -Path "$browserforge_path\headers\data" -ErrorAction SilentlyContinue
-
-          # Create directories - use -Force to create parent directories
-          $fingerprintDataDir = "$dest_internal\fingerprints\data"
-          $headersDataDir = "$dest_internal\headers\data"
-
-          New-Item -ItemType Directory -Force -Path $fingerprintDataDir | Out-Null
-          New-Item -ItemType Directory -Force -Path $headersDataDir | Out-Null
-
-          echo "Created directories:"
-          echo "  - $fingerprintDataDir"
-          echo "  - $headersDataDir"
-
-          # Copy fingerprint data files
-          $srcFingerprintData = "$browserforge_path\fingerprints\data"
-          if (Test-Path $srcFingerprintData) {
-            $files = Get-ChildItem -Path $srcFingerprintData -File
-            foreach ($file in $files) {
-              Copy-Item -Path $file.FullName -Destination $fingerprintDataDir -Force
-              echo "Copied: $($file.Name)"
-            }
-            echo "Copied $($files.Count) fingerprint data files"
-          } else {
-            echo "WARNING: Source fingerprint data not found at $srcFingerprintData"
-          }
-
-          # Copy headers data files
-          $srcHeadersData = "$browserforge_path\headers\data"
-          if (Test-Path $srcHeadersData) {
-            $files = Get-ChildItem -Path $srcHeadersData -File
-            foreach ($file in $files) {
-              Copy-Item -Path $file.FullName -Destination $headersDataDir -Force
-              echo "Copied: $($file.Name)"
-            }
-            echo "Copied $($files.Count) headers data files"
-          } else {
-            echo "WARNING: Source headers data not found at $srcHeadersData"
-          }
-
-          # Final verification
-          echo ""
-          echo "=== Final browserforge structure ==="
-          Get-ChildItem -Path "$dest_internal" -Recurse | ForEach-Object { echo $_.FullName }
-
-          echo ""
-          echo "=== Verifying zip files exist ==="
-          $fpZip = "$fingerprintDataDir\fingerprint-network.zip"
-          $hdZip = "$headersDataDir\input-network.zip"
-
-          if (Test-Path $fpZip) {
+          if (Test-Path $fingerprintZip) {
             echo "OK: fingerprint-network.zip exists"
           } else {
             echo "ERROR: fingerprint-network.zip NOT found!"
+            $allFound = $false
           }
 
-          if (Test-Path $hdZip) {
+          if (Test-Path $headersZip) {
             echo "OK: input-network.zip exists"
           } else {
             echo "ERROR: input-network.zip NOT found!"
+            $allFound = $false
           }
+
+          if (-not $allFound) {
+            echo "Some required files are missing. Listing browserforge directory:"
+            Get-ChildItem -Path "dist/UniqloJPChecker/_internal/browserforge" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+            exit 1
+          }
+
+          echo "All browserforge data files verified successfully!"
 
       - name: Prepare distribution
         run: |
