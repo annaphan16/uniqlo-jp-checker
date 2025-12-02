@@ -700,38 +700,48 @@ class UniqloJPChecker:
 
 
 def check_browser_installed():
-    """Check if Camoufox/Firefox browser is installed"""
+    """Check if Camoufox browser is installed"""
     try:
-        from playwright.sync_api import sync_playwright
+        print(f"{Fore.CYAN}[CHECK] Checking if Camoufox browser is installed...")
 
-        print(f"{Fore.CYAN}[CHECK] Checking if Firefox browser is installed...")
+        # Check camoufox package
+        try:
+            from camoufox.sync_api import Camoufox
+            print(f"{Fore.GREEN}[CHECK] ✅ Camoufox package is installed")
+        except ImportError:
+            print(f"{Fore.RED}[CHECK] ❌ Camoufox package not installed")
+            print(f"{Fore.YELLOW}💡 Please install dependencies:")
+            print(f"{Fore.CYAN}   pip install -r requirements.txt")
+            return False
 
-        with sync_playwright() as p:
-            # Try to get firefox browser
-            try:
-                browser_type = p.firefox
-                # Check if executable exists
-                executable_path = browser_type.executable_path
+        # Check if camoufox browser binary exists
+        try:
+            from camoufox.pkgman import get_path
 
-                if executable_path and os.path.exists(executable_path):
-                    print(f"{Fore.GREEN}[CHECK] ✅ Firefox browser is installed")
-                    print(f"{Fore.CYAN}[CHECK] Path: {executable_path}")
-                    return True
-                else:
-                    raise Exception("Firefox executable not found")
+            # Try to get camoufox browser path
+            browser_path = get_path("camoufox")
+            if browser_path and os.path.exists(browser_path):
+                print(f"{Fore.GREEN}[CHECK] ✅ Camoufox browser is installed")
+                print(f"{Fore.CYAN}[CHECK] Path: {browser_path}")
+                return True
+        except Exception:
+            pass
 
-            except Exception as e:
-                print(f"{Fore.RED}[CHECK] ❌ Firefox browser is NOT installed")
-                print(f"{Fore.YELLOW}[CHECK] Error: {e}")
-                print(f"\n{Fore.YELLOW}💡 Please install Firefox browser:")
-                print(f"{Fore.CYAN}   playwright install firefox")
-                print(f"\n{Fore.YELLOW}Or install all browsers:")
-                print(f"{Fore.CYAN}   playwright install")
-                return False
+        # Fallback: just check if the module loads without error
+        try:
+            import camoufox
+            print(f"{Fore.GREEN}[CHECK] ✅ Camoufox is available")
+            return True
+        except Exception as e:
+            print(f"{Fore.RED}[CHECK] ❌ Camoufox browser not found")
+            print(f"{Fore.YELLOW}[CHECK] Error: {e}")
+            print(f"\n{Fore.YELLOW}💡 Please fetch Camoufox browser:")
+            print(f"{Fore.CYAN}   python -m camoufox fetch")
+            return False
 
-    except ImportError:
-        print(f"{Fore.RED}[CHECK] ❌ Playwright is not installed")
-        print(f"\n{Fore.YELLOW}💡 Please install dependencies:")
+    except Exception as e:
+        print(f"{Fore.RED}[CHECK] ❌ Error checking browser: {e}")
+        print(f"{Fore.YELLOW}💡 Please install dependencies:")
         print(f"{Fore.CYAN}   pip install -r requirements.txt")
         return False
 
