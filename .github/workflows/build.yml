@@ -55,13 +55,30 @@ jobs:
       - name: Get browserforge data path
         id: browserforge_path
         run: |
-          $path = python -c "import browserforge; import os; print(os.path.dirname(browserforge.__file__))"
+          # Use importlib to find package location (works for namespace packages)
+          $path = python -c "import importlib.util; spec = importlib.util.find_spec('browserforge'); print(spec.submodule_search_locations[0] if spec.submodule_search_locations else spec.origin.rsplit('\\\\', 1)[0] if spec.origin else '')"
+
+          # Fallback: try pip show
+          if (-not $path -or $path -eq "") {
+            $pipInfo = pip show browserforge | Select-String "Location:"
+            if ($pipInfo) {
+              $sitePackages = ($pipInfo -replace "Location: ", "").Trim()
+              $path = "$sitePackages\browserforge"
+            }
+          }
+
           echo "BROWSERFORGE_PATH=$path" >> $env:GITHUB_OUTPUT
           echo "Browserforge path: $path"
 
           # List data files
-          Get-ChildItem -Path "$path\fingerprints\data" -ErrorAction SilentlyContinue
-          Get-ChildItem -Path "$path\headers\data" -ErrorAction SilentlyContinue
+          if ($path -and (Test-Path $path)) {
+            echo "Fingerprints data:"
+            Get-ChildItem -Path "$path\fingerprints\data" -ErrorAction SilentlyContinue
+            echo "Headers data:"
+            Get-ChildItem -Path "$path\headers\data" -ErrorAction SilentlyContinue
+          } else {
+            echo "WARNING: Browserforge path not found or empty"
+          }
 
       - name: Build EXE (onedir mode)
         run: |
