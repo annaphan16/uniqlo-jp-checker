@@ -88,8 +88,10 @@ class CamoufoxCookieGetter:
                 'headless': self.headless,
                 # geoip=True requires extra install: pip install camoufox[geoip]
                 # Bỏ geoip để tránh lỗi NotInstalledGeoIPExtra
+                # Disable addons để tránh lỗi InvalidAddonPath khi chạy từ PyInstaller exe
+                'addons': [],
             }
-            
+
             if proxy_config:
                 launch_options['proxy'] = proxy_config
                 print(f"{Fore.MAGENTA}[PROXY] Server: {proxy_config.get('server', 'N/A')}")
