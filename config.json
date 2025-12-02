@@ -1,0 +1,25 @@
+{
+    "threads": 2,
+    "retry": 5,
+    "timeout": 60,
+    "delay_min": 2,
+    "delay_max": 4,
+    "use_proxy": true,
+    "proxy_auto_reload": true,
+    "proxy_reset_failed_on_reload": true,
+    "acc_file": "acc.txt",
+    "proxy_file": "proxy.txt",
+    "hits_file": "HITS.txt",
+    "failed_file": "failed.txt",
+    "log_file": "checker.log",
+    "verbose": true,
+    "debug": true,
+    "warmup_session": true,
+    "min_cookies": 3,
+    "warmup_delay_min": 2,
+    "warmup_delay_max": 4,
+    "login_delay_min": 2,
+    "login_delay_max": 4,
+    "camoufox_headless": false
+}
+

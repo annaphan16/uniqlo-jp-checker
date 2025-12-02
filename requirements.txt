@@ -1,0 +1,14 @@
+# Dependencies cho Uniqlo JP Checker - Camoufox Version
+
+# Camoufox - Anti-detect browser automation
+camoufox>=0.4.0
+
+# Playwright - Browser automation framework (required by Camoufox)
+playwright>=1.40.0
+
+# Colorama - Terminal colors
+colorama>=0.4.6
+
+# Requests - HTTP library (for fallback)
+requests>=2.31.0
+

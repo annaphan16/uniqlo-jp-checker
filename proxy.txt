@@ -1,0 +1,10 @@
+# File cấu hình proxy cho Camoufox Multi-Browser Tool
+# Format: ip:port:username:password
+# Mỗi dòng là một proxy
+
+# Ví dụ:
+# 123.45.67.89:8080:myuser:mypass123
+# 98.76.54.32:3128:proxyuser:secretpass
+
+# Thêm proxy của bạn vào đây:
+

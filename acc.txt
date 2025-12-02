@@ -1,0 +1,10 @@
+# File chứa danh sách tài khoản Uniqlo JP để check
+# Format: email:password
+# Mỗi dòng là một tài khoản
+
+# Ví dụ:
+# test@example.com:password123
+# user@gmail.com:mypassword
+
+# Thêm tài khoản của bạn vào đây:
+
