@@ -15,9 +15,9 @@ on:
         default: 'dev'
 
 jobs:
-  build-windows:
+  build-windows-onedir:
     runs-on: windows-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -33,137 +33,181 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
+          pip install browserforge
 
       - name: Install Playwright browsers
         run: |
           playwright install firefox
           playwright install-deps firefox
 
-      - name: Install Camoufox browser
+      - name: Install Camoufox browser and download model files
         run: |
-          python -c "from camoufox.sync_api import Camoufox; print('Camoufox imported successfully')"
+          # Fetch camoufox browser
           python -m camoufox fetch
-        continue-on-error: true
 
-      - name: Create PyInstaller spec file
+          # Download browserforge model files (fingerprints and headers data)
+          python -c "from browserforge.fingerprints import FingerprintGenerator; fg = FingerprintGenerator(); print('Fingerprint model downloaded')"
+          python -c "from browserforge.headers import HeaderGenerator; hg = HeaderGenerator(); print('Headers model downloaded')"
+
+          # Verify camoufox works
+          python -c "from camoufox.sync_api import Camoufox; print('Camoufox imported successfully')"
+
+      - name: Get browserforge data path
+        id: browserforge_path
         run: |
-          @"
-          # -*- mode: python ; coding: utf-8 -*-
-          import os
-          import sys
-          from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
+          $path = python -c "import browserforge; import os; print(os.path.dirname(browserforge.__file__))"
+          echo "BROWSERFORGE_PATH=$path" >> $env:GITHUB_OUTPUT
+          echo "Browserforge path: $path"
 
-          block_cipher = None
+          # List data files
+          Get-ChildItem -Path "$path\fingerprints\data" -ErrorAction SilentlyContinue
+          Get-ChildItem -Path "$path\headers\data" -ErrorAction SilentlyContinue
 
-          # Collect all data and binaries from packages
-          datas = []
-          binaries = []
-          hiddenimports = []
-
-          # Collect camoufox data
-          try:
-              camoufox_datas, camoufox_binaries, camoufox_hiddenimports = collect_all('camoufox')
-              datas += camoufox_datas
-              binaries += camoufox_binaries
-              hiddenimports += camoufox_hiddenimports
-          except Exception as e:
-              print(f"Warning: Could not collect camoufox: {e}")
-
-          # Collect playwright data
-          try:
-              playwright_datas, playwright_binaries, playwright_hiddenimports = collect_all('playwright')
-              datas += playwright_datas
-              binaries += playwright_binaries
-              hiddenimports += playwright_hiddenimports
-          except Exception as e:
-              print(f"Warning: Could not collect playwright: {e}")
-
-          # Add colorama
-          try:
-              colorama_datas = collect_data_files('colorama')
-              datas += colorama_datas
-              hiddenimports += collect_submodules('colorama')
-          except Exception as e:
-              print(f"Warning: Could not collect colorama: {e}")
-
-          # Add additional hidden imports
-          hiddenimports += [
-              'asyncio',
-              'json',
-              'datetime',
-              'threading',
-              'concurrent.futures',
-              'platform',
-              'requests',
-              'urllib3',
-              'certifi',
-              'charset_normalizer',
-              'idna',
-          ]
-
-          # Add data files from current directory
-          datas += [
-              ('config.json', '.'),
-              ('acc.txt', '.'),
-              ('proxy.txt', '.'),
-          ]
-
-          a = Analysis(
-              ['uniqlo_jp_checker_camoufox.py'],
-              pathex=[],
-              binaries=binaries,
-              datas=datas,
-              hiddenimports=hiddenimports,
-              hookspath=[],
-              hooksconfig={},
-              runtime_hooks=[],
-              excludes=[],
-              win_no_prefer_redirects=False,
-              win_private_assemblies=False,
-              cipher=block_cipher,
-              noarchive=False,
-          )
-
-          pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-          exe = EXE(
-              pyz,
-              a.scripts,
-              a.binaries,
-              a.zipfiles,
-              a.datas,
-              [],
-              name='UniqloJPChecker',
-              debug=False,
-              bootloader_ignore_signals=False,
-              strip=False,
-              upx=True,
-              upx_exclude=[],
-              runtime_tmpdir=None,
-              console=True,
-              disable_windowed_traceback=False,
-              argv_emulation=False,
-              target_arch=None,
-              codesign_identity=None,
-              entitlements_file=None,
-              icon=None,
-          )
-          "@ | Out-File -FilePath uniqlo_checker.spec -Encoding utf8
-
-      - name: Build EXE with PyInstaller
+      - name: Build EXE (onedir mode)
         run: |
-          pyinstaller uniqlo_checker.spec --clean
+          pyinstaller --name UniqloJPChecker `
+            --onedir `
+            --console `
+            --add-data "config.json;." `
+            --add-data "camoufox_cookie_getter.py;." `
+            --hidden-import camoufox `
+            --hidden-import camoufox.sync_api `
+            --hidden-import camoufox.async_api `
+            --hidden-import camoufox.utils `
+            --hidden-import camoufox.locale `
+            --hidden-import camoufox.addons `
+            --hidden-import playwright `
+            --hidden-import playwright.sync_api `
+            --hidden-import playwright.async_api `
+            --hidden-import playwright._impl `
+            --hidden-import playwright._impl._api_types `
+            --hidden-import browserforge `
+            --hidden-import browserforge.fingerprints `
+            --hidden-import browserforge.headers `
+            --hidden-import browserforge.bayesian_network `
+            --hidden-import colorama `
+            --hidden-import requests `
+            --hidden-import urllib3 `
+            --hidden-import certifi `
+            --hidden-import charset_normalizer `
+            --hidden-import idna `
+            --hidden-import asyncio `
+            --hidden-import json `
+            --hidden-import datetime `
+            --hidden-import threading `
+            --hidden-import concurrent.futures `
+            --hidden-import zipfile `
+            --collect-all camoufox `
+            --collect-all playwright `
+            --collect-all browserforge `
+            --collect-data colorama `
+            --collect-data certifi `
+            uniqlo_jp_checker_camoufox.py
 
-      - name: Create distribution package
+      - name: Verify browserforge data in build
         run: |
-          New-Item -ItemType Directory -Force -Path dist/UniqloJPChecker
-          Copy-Item dist/UniqloJPChecker.exe dist/UniqloJPChecker/
+          echo "Checking browserforge data in dist..."
+          Get-ChildItem -Path "dist/UniqloJPChecker/_internal/browserforge" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
+
+          # Check if data files exist
+          $fingerprintData = "dist/UniqloJPChecker/_internal/browserforge/fingerprints/data"
+          $headersData = "dist/UniqloJPChecker/_internal/browserforge/headers/data"
+
+          if (Test-Path $fingerprintData) {
+            echo "Fingerprint data exists:"
+            Get-ChildItem $fingerprintData
+          } else {
+            echo "WARNING: Fingerprint data NOT found!"
+          }
+
+          if (Test-Path $headersData) {
+            echo "Headers data exists:"
+            Get-ChildItem $headersData
+          } else {
+            echo "WARNING: Headers data NOT found!"
+          }
+
+      - name: Copy browserforge data manually
+        run: |
+          $browserforge_path = python -c "import browserforge; import os; print(os.path.dirname(browserforge.__file__))"
+          $dest_internal = "dist/UniqloJPChecker/_internal/browserforge"
+
+          echo "Source browserforge path: $browserforge_path"
+          echo "Destination path: $dest_internal"
+
+          # List source data files
+          echo "Source fingerprints data:"
+          Get-ChildItem -Path "$browserforge_path\fingerprints\data" -ErrorAction SilentlyContinue
+          echo "Source headers data:"
+          Get-ChildItem -Path "$browserforge_path\headers\data" -ErrorAction SilentlyContinue
+
+          # Create directories - use -Force to create parent directories
+          $fingerprintDataDir = "$dest_internal\fingerprints\data"
+          $headersDataDir = "$dest_internal\headers\data"
+
+          New-Item -ItemType Directory -Force -Path $fingerprintDataDir | Out-Null
+          New-Item -ItemType Directory -Force -Path $headersDataDir | Out-Null
+
+          echo "Created directories:"
+          echo "  - $fingerprintDataDir"
+          echo "  - $headersDataDir"
+
+          # Copy fingerprint data files
+          $srcFingerprintData = "$browserforge_path\fingerprints\data"
+          if (Test-Path $srcFingerprintData) {
+            $files = Get-ChildItem -Path $srcFingerprintData -File
+            foreach ($file in $files) {
+              Copy-Item -Path $file.FullName -Destination $fingerprintDataDir -Force
+              echo "Copied: $($file.Name)"
+            }
+            echo "Copied $($files.Count) fingerprint data files"
+          } else {
+            echo "WARNING: Source fingerprint data not found at $srcFingerprintData"
+          }
+
+          # Copy headers data files
+          $srcHeadersData = "$browserforge_path\headers\data"
+          if (Test-Path $srcHeadersData) {
+            $files = Get-ChildItem -Path $srcHeadersData -File
+            foreach ($file in $files) {
+              Copy-Item -Path $file.FullName -Destination $headersDataDir -Force
+              echo "Copied: $($file.Name)"
+            }
+            echo "Copied $($files.Count) headers data files"
+          } else {
+            echo "WARNING: Source headers data not found at $srcHeadersData"
+          }
+
+          # Final verification
+          echo ""
+          echo "=== Final browserforge structure ==="
+          Get-ChildItem -Path "$dest_internal" -Recurse | ForEach-Object { echo $_.FullName }
+
+          echo ""
+          echo "=== Verifying zip files exist ==="
+          $fpZip = "$fingerprintDataDir\fingerprint-network.zip"
+          $hdZip = "$headersDataDir\input-network.zip"
+
+          if (Test-Path $fpZip) {
+            echo "OK: fingerprint-network.zip exists"
+          } else {
+            echo "ERROR: fingerprint-network.zip NOT found!"
+          }
+
+          if (Test-Path $hdZip) {
+            echo "OK: input-network.zip exists"
+          } else {
+            echo "ERROR: input-network.zip NOT found!"
+          }
+
+      - name: Prepare distribution
+        run: |
           Copy-Item config.json dist/UniqloJPChecker/
           Copy-Item acc.txt dist/UniqloJPChecker/ -ErrorAction SilentlyContinue
           Copy-Item proxy.txt dist/UniqloJPChecker/ -ErrorAction SilentlyContinue
           Copy-Item README.md dist/UniqloJPChecker/ -ErrorAction SilentlyContinue
           Copy-Item QUICKSTART.md dist/UniqloJPChecker/ -ErrorAction SilentlyContinue
-          
+
           # Create empty files if they don't exist
           if (-not (Test-Path dist/UniqloJPChecker/acc.txt)) {
             New-Item -ItemType File -Path dist/UniqloJPChecker/acc.txt
@@ -191,98 +235,6 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-windows-onedir:
-    runs-on: windows-latest
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
-
-      - name: Install Playwright browsers
-        run: |
-          playwright install firefox
-          playwright install-deps firefox
-
-      - name: Install Camoufox browser
-        run: |
-          python -c "from camoufox.sync_api import Camoufox; print('Camoufox imported successfully')"
-          python -m camoufox fetch
-        continue-on-error: true
-
-      - name: Build EXE (onedir mode - smaller size)
-        run: |
-          pyinstaller --name UniqloJPChecker `
-            --onedir `
-            --console `
-            --add-data "config.json;." `
-            --add-data "camoufox_cookie_getter.py;." `
-            --hidden-import camoufox `
-            --hidden-import camoufox.sync_api `
-            --hidden-import camoufox.async_api `
-            --hidden-import playwright `
-            --hidden-import playwright.sync_api `
-            --hidden-import playwright.async_api `
-            --hidden-import colorama `
-            --hidden-import requests `
-            --hidden-import asyncio `
-            --hidden-import json `
-            --hidden-import datetime `
-            --hidden-import threading `
-            --hidden-import concurrent.futures `
-            --collect-all camoufox `
-            --collect-all playwright `
-            --collect-data colorama `
-            uniqlo_jp_checker_camoufox.py
-
-      - name: Prepare distribution
-        run: |
-          Copy-Item config.json dist/UniqloJPChecker/
-          Copy-Item acc.txt dist/UniqloJPChecker/ -ErrorAction SilentlyContinue
-          Copy-Item proxy.txt dist/UniqloJPChecker/ -ErrorAction SilentlyContinue
-          Copy-Item README.md dist/UniqloJPChecker/ -ErrorAction SilentlyContinue
-          Copy-Item QUICKSTART.md dist/UniqloJPChecker/ -ErrorAction SilentlyContinue
-          
-          # Create empty files if they don't exist
-          if (-not (Test-Path dist/UniqloJPChecker/acc.txt)) {
-            New-Item -ItemType File -Path dist/UniqloJPChecker/acc.txt
-          }
-          if (-not (Test-Path dist/UniqloJPChecker/proxy.txt)) {
-            New-Item -ItemType File -Path dist/UniqloJPChecker/proxy.txt
-          }
-
-      - name: Create ZIP archive
-        run: |
-          Compress-Archive -Path dist/UniqloJPChecker/* -DestinationPath dist/UniqloJPChecker-Windows-x64-onedir.zip
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: UniqloJPChecker-Windows-x64-onedir
-          path: dist/UniqloJPChecker-Windows-x64-onedir.zip
-          retention-days: 30
-
-      - name: Create Release (on tag push)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: dist/UniqloJPChecker-Windows-x64-onedir.zip
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
