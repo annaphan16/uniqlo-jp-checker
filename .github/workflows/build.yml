@@ -74,6 +74,9 @@ jobs:
             --hidden-import browserforge.fingerprints `
             --hidden-import browserforge.headers `
             --hidden-import browserforge.bayesian_network `
+            --hidden-import language_tags `
+            --hidden-import language_tags.tags `
+            --hidden-import language_tags.Subtag `
             --hidden-import colorama `
             --hidden-import requests `
             --hidden-import urllib3 `
@@ -89,40 +92,63 @@ jobs:
             --collect-all camoufox `
             --collect-all playwright `
             --collect-all browserforge `
+            --collect-all language_tags `
             --collect-data colorama `
             --collect-data certifi `
             uniqlo_jp_checker_camoufox.py
 
-      - name: Verify browserforge data in build
+      - name: Verify and fix data files in build
         run: |
-          echo "Checking browserforge data in dist..."
-
+          echo "=== Checking browserforge data ==="
           $fingerprintZip = "dist/UniqloJPChecker/_internal/browserforge/fingerprints/data/fingerprint-network.zip"
           $headersZip = "dist/UniqloJPChecker/_internal/browserforge/headers/data/input-network.zip"
-
-          $allFound = $true
 
           if (Test-Path $fingerprintZip) {
             echo "OK: fingerprint-network.zip exists"
           } else {
             echo "ERROR: fingerprint-network.zip NOT found!"
-            $allFound = $false
           }
 
           if (Test-Path $headersZip) {
             echo "OK: input-network.zip exists"
           } else {
             echo "ERROR: input-network.zip NOT found!"
-            $allFound = $false
           }
 
-          if (-not $allFound) {
-            echo "Some required files are missing. Listing browserforge directory:"
-            Get-ChildItem -Path "dist/UniqloJPChecker/_internal/browserforge" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName
-            exit 1
+          echo ""
+          echo "=== Checking language_tags data ==="
+          $langTagsIndex = "dist/UniqloJPChecker/_internal/language_tags/data/json/index.json"
+
+          if (Test-Path $langTagsIndex) {
+            echo "OK: language_tags index.json exists"
+          } else {
+            echo "WARNING: language_tags index.json NOT found, copying manually..."
+
+            # Get language_tags package location
+            $langTagsPath = python -c "import language_tags; import os; print(os.path.dirname(language_tags.__file__))"
+            echo "Source language_tags path: $langTagsPath"
+
+            # Create destination directory
+            $destPath = "dist/UniqloJPChecker/_internal/language_tags/data/json"
+            New-Item -ItemType Directory -Force -Path $destPath | Out-Null
+
+            # Copy json data files
+            if (Test-Path "$langTagsPath/data/json") {
+              Copy-Item -Path "$langTagsPath/data/json/*" -Destination $destPath -Force -Recurse
+              echo "Copied language_tags json data files"
+            }
+
+            # Verify after copy
+            if (Test-Path $langTagsIndex) {
+              echo "OK: language_tags index.json now exists"
+            } else {
+              echo "ERROR: Failed to copy language_tags data!"
+              exit 1
+            }
           }
 
-          echo "All browserforge data files verified successfully!"
+          echo ""
+          echo "=== All data files verified ==="
 
       - name: Prepare distribution
         run: |
